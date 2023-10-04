@@ -54,6 +54,9 @@ class BasicBlock(nn.Module):
             )
             planes1 = self.expansion * planes
         self.activ = partial(nn.ReLU(inplace=True)) if self.use_activ else lambda x: x
+
+        assert not self.use_activ if self.activ(torch.tensor(-100)) == -100 else self.use_activ
+
         self.use_alpha = use_alpha
         if self.use_alpha:
             self.alpha = nn.Parameter(torch.ones(1) * init_a)
@@ -69,6 +72,9 @@ class BasicBlock(nn.Module):
             elif what_lactiv == 3:
                 ac1 = torch.tanh
         self.lactiv = partial(ac1) if self.use_lactiv else lambda x: x
+
+        assert not self.use_activ if self.activ(torch.tensor(-100)) == -100 else self.use_activ
+
         # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
             planes_ho = planes1
@@ -80,6 +86,9 @@ class BasicBlock(nn.Module):
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=1, out_planes=planes_ho)
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
         self.uactiv = partial(ac1) if self.use_uactiv else lambda x: x
+
+        assert not self.use_activ if self.activ(torch.tensor(-100)) == -100 else self.use_activ
+        print(f"{'Activations being used' if self.use_activ else 'No activations being used'}")
 
     def forward(self, x):
         out = self.activ(self.bn1(self.conv1(x)))
