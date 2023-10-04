@@ -21,10 +21,11 @@ def get_norm(norm_local):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, use_activ=True, use_alpha=False, n_lconvs=0, 
+    def __init__(self, in_planes, planes, stride=1, use_activ=True, use_alpha=False, n_lconvs=0,
                  norm_local=None, kern_loc=1, norm_layer=None, use_lactiv=False, norm_x=-1,
                  n_xconvs=0, what_lactiv=-1, kern_loc_so=3, use_uactiv=False, norm_bso=None,
-                 use_only_first_conv=False, n_bsoconvs=0, init_a=0, planes_ho=None, **kwargs):
+                 use_only_first_conv=False, n_bsoconvs=0, init_a=0, planes_ho=None,
+                 train_time_activ=False, **kwargs):
         super(BasicBlock, self).__init__()
         self._norm_layer = get_norm(norm_layer)
         self._norm_local = get_norm(norm_local)
@@ -38,6 +39,7 @@ class BasicBlock(nn.Module):
         self.use_lactiv = self.use_activ and use_lactiv
         self.use_uactiv = self.use_activ and use_uactiv
         self.use_only_first_conv = use_only_first_conv
+        self.train_time_activ = train_time_activ
 
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = self._norm_layer(planes)
@@ -53,16 +55,18 @@ class BasicBlock(nn.Module):
                 self._norm_layer(self.expansion*planes)
             )
             planes1 = self.expansion * planes
-        self.activ = partial(nn.ReLU(inplace=True)) if self.use_activ else lambda x: x
+        self.activ = partial(self._get_activ_layer()) if self.use_activ else lambda x: x
 
-        assert not self.use_activ if self.activ(torch.tensor(-100)) == -100 else self.use_activ
+        assert not self.use_activ if self.activ(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
+        assert not (self.train_time_activ and not self.use_activ), 'use_activ must be True to use train time activations'
+        assert not (self.train_time_activ and not isinstance(self.activ.func, nn.PReLU))
 
         self.use_alpha = use_alpha
         if self.use_alpha:
             self.alpha = nn.Parameter(torch.ones(1) * init_a)
             self.monitor_alpha = []
         self.normx = self._norm_x(planes1)
-        if 1:
+        if not self.train_time_activ:
             if what_lactiv == -1:
                 ac1 = nn.ReLU(inplace=True)
             elif what_lactiv == 1:
@@ -71,9 +75,14 @@ class BasicBlock(nn.Module):
                 ac1 = nn.LeakyReLU(inplace=True)
             elif what_lactiv == 3:
                 ac1 = torch.tanh
-        self.lactiv = partial(ac1) if self.use_lactiv else lambda x: x
+        else:
+            ac1 = self._get_activ_layer()
+            if what_lactiv != -1:
+                print('Overriding what_lactiv parameter and using PReLU since train_time_activ is True')
 
-        assert not self.use_activ if self.activ(torch.tensor(-100)) == -100 else self.use_activ
+        self.lactiv = partial(ac1) if self.use_lactiv else lambda x: x
+        assert not self.use_activ if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
+        assert not (self.train_time_activ and not isinstance(self.lactiv.func, nn.PReLU))
 
         # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
@@ -87,8 +96,9 @@ class BasicBlock(nn.Module):
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
         self.uactiv = partial(ac1) if self.use_uactiv else lambda x: x
 
-        assert not self.use_activ if self.activ(torch.tensor(-100)) == -100 else self.use_activ
-        print(f"{'Activations being used' if self.use_activ else 'No activations being used'}")
+        assert not self.use_activ if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
+        assert not (self.train_time_activ and not isinstance(self.uactiv.func, nn.PReLU))
+        print(f"{'Train time ' if self.train_time_activ else ''}{'activations being used' if self.use_activ else 'No activations being used'}")
 
     def forward(self, x):
         out = self.activ(self.bn1(self.conv1(x)))
@@ -148,6 +158,11 @@ class BasicBlock(nn.Module):
         out_uo = self.uactiv(getattr(self, 'ubn{}'.format(key))(out_uo))
         return out_uo
 
+    def _get_activ_layer(self):
+        """Returns PReLU if using train time activations, otherwise ReLU"""
+        if self.train_time_activ:
+            return nn.PReLU(init=0)
+        return nn.ReLU(inplace=True)
 
 
 class PDC(nn.Module):
@@ -193,7 +208,7 @@ class PDC(nn.Module):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, stride, 
+            layers.append(block(self.in_planes, planes, stride,
                                 norm_layer=self._norm_layer, **kwargs))
             self.in_planes = planes * block.expansion
         # # cheeky way to get the activation from the layer1, e.g. in no activation case.
@@ -220,5 +235,3 @@ def PDC_wrapper(num_blocks=None, **kwargs):
     if num_blocks is None:
         num_blocks = [1, 1, 1, 1]
     return PDC(BasicBlock, num_blocks, **kwargs)
-
-
