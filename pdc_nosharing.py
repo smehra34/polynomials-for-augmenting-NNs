@@ -55,11 +55,11 @@ class BasicBlock(nn.Module):
                 self._norm_layer(self.expansion*planes)
             )
             planes1 = self.expansion * planes
-        self.activ = partial(self._get_activ_layer()) if self.use_activ else lambda x: x
+        self.activ = self._get_activ_layer() if self.use_activ else lambda x: x
 
         assert not self.use_activ if self.activ(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
         assert not (self.train_time_activ and not self.use_activ), 'use_activ must be True to use train time activations'
-        assert not (self.train_time_activ and not isinstance(self.activ.func, nn.PReLU))
+        assert not (self.train_time_activ and not isinstance(self.activ, nn.PReLU))
 
         self.use_alpha = use_alpha
         if self.use_alpha:
@@ -80,9 +80,9 @@ class BasicBlock(nn.Module):
             if what_lactiv != -1:
                 print('Overriding what_lactiv parameter and using PReLU since train_time_activ is True')
 
-        self.lactiv = partial(ac1) if self.use_lactiv else lambda x: x
+        self.lactiv = ac1 if self.use_lactiv else lambda x: x
         assert not self.use_activ if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
-        assert not (self.train_time_activ and not isinstance(self.lactiv.func, nn.PReLU))
+        assert not (self.train_time_activ and not isinstance(self.lactiv, nn.PReLU))
 
         # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
@@ -94,10 +94,10 @@ class BasicBlock(nn.Module):
         #self.def_local_convs(planes1, n_xconvs, kern_loc, self._norm_x, key='x')
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=1, out_planes=planes_ho)
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
-        self.uactiv = partial(ac1) if self.use_uactiv else lambda x: x
+        self.uactiv = ac1 if self.use_uactiv else lambda x: x
 
         assert not self.use_activ if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
-        assert not (self.train_time_activ and not isinstance(self.uactiv.func, nn.PReLU))
+        assert not (self.train_time_activ and not isinstance(self.uactiv, nn.PReLU))
         print(f"{'Train time ' if self.train_time_activ else ''}{'activations being used' if self.use_activ else 'No activations being used'}")
 
     def forward(self, x):
