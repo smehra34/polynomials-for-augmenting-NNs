@@ -164,6 +164,18 @@ class BasicBlock(nn.Module):
             return nn.PReLU(init=0)
         return nn.ReLU(inplace=True)
 
+    def remove_all_activations(self):
+        """Sets all activation functions in the block to identity fct"""
+        self.activ = nn.Identity()
+        assert self.activ(torch.tensor(-100, dtype=torch.float)) == -100
+
+        self.lactiv = nn.Identity()
+        assert self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100
+
+        self.uactiv = nn.Identity()
+        assert self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100
+
+
 
 class PDC(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10, norm_layer=None, out_activ=False, pool_adapt=False,
@@ -192,6 +204,7 @@ class PDC(nn.Module):
         self.layer2 = self._make_layer(block, n_channels[1], num_blocks[1], stride=2, planes_ho=planes_ho[1], **kwargs)
         self.layer3 = self._make_layer(block, n_channels[2], num_blocks[2], stride=2, planes_ho=planes_ho[2], **kwargs)
         self.layer4 = self._make_layer(block, n_channels[3], num_blocks[3], stride=2, planes_ho=planes_ho[3], **kwargs)
+
         if len(n_channels) > 4:
             print('Using additional blocks (org. 4): ', len(n_channels))
             for i in range(len(n_channels) - 4):
@@ -230,6 +243,16 @@ class PDC(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
+
+    def remove_all_activations(self):
+
+        self.activ = nn.Identity()
+        assert self.activ(torch.tensor(-100, dtype=torch.float)) == -100
+        for i in range(len(self.n_channels)):
+            layer = getattr(self, 'layer{}'.format(i + 1))
+            for block in layer:
+                block.remove_all_activations()
+
 
 def PDC_wrapper(num_blocks=None, **kwargs):
     if num_blocks is None:

@@ -78,6 +78,7 @@ def main(seed=None, use_cuda=True):
     # # set the cuda availability.
     cuda = torch.cuda.is_available() and use_cuda
     device = torch.device('cuda' if cuda else 'cpu')
+    print(device)
     yml = yaml.safe_load(open('pdc_so_nosharing.yml'))  # # file that includes the configuration.
     cur_path = abspath(curdir)
     # # define the output path
@@ -112,14 +113,14 @@ def main(seed=None, use_cuda=True):
 
     for epoch in range(1, tinfo['total_epochs'] + 1):
         scheduler.step()
-        net = train(train_loader, net, optimizer, criterion, yml['training_info'], 
+        net = train(train_loader, net, optimizer, criterion, yml['training_info'],
                     epoch, device)
         save_checkpoints(net, optimizer, epoch, out)
-        # # testing mode to evaluate accuracy. 
+        # # testing mode to evaluate accuracy.
         acc = test(net, test_loader, device=device)
         if acc > best_acc:
             out_path = join(out, 'net_best_1.pth')
-            state = {'net': net.state_dict(), 'acc': acc, 
+            state = {'net': net.state_dict(), 'acc': acc,
                      'epoch': epoch, 'n_params': total_params}
             torch.save(state, out_path)
             best_acc = acc
@@ -129,8 +130,14 @@ def main(seed=None, use_cuda=True):
         print(msg.format(epoch,  acc, best_acc, best_epoch))
         logging.info(msg.format(epoch, acc, best_acc, best_epoch))
 
+        # remove activation layers from model if using train time activ and
+        # epoch threshold is reached
+        if modc['args']['train_time_activ'] and epoch == tinfo['epochs_with_activations']:
+            net.remove_all_activations()
+            msg = f"\n\n----- Activations removed at epoch {epoch} -----\n\n"
+            print(msg)
+            logging.info(msg)
+
 
 if __name__ == '__main__':
     main()
-
-
