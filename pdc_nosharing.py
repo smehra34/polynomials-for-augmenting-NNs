@@ -75,14 +75,16 @@ class BasicBlock(nn.Module):
                 ac1 = nn.LeakyReLU(inplace=True)
             elif what_lactiv == 3:
                 ac1 = torch.tanh
+            ac2 = ac1
         else:
             ac1 = self._get_activ_layer()
+            ac2 = self._get_activ_layer()
             if what_lactiv != -1:
                 print('Overriding what_lactiv parameter and using PReLU since train_time_activ is True')
 
         self.lactiv = ac1 if self.use_lactiv else lambda x: x
         assert not self.use_activ if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
-        assert not (self.train_time_activ and not isinstance(self.lactiv, nn.PReLU))
+        assert not (self.use_lactiv and self.train_time_activ and not isinstance(self.lactiv, nn.PReLU))
 
         # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
@@ -94,10 +96,10 @@ class BasicBlock(nn.Module):
         #self.def_local_convs(planes1, n_xconvs, kern_loc, self._norm_x, key='x')
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=1, out_planes=planes_ho)
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
-        self.uactiv = ac1 if self.use_uactiv else lambda x: x
+        self.uactiv = ac2 if self.use_uactiv else lambda x: x
 
         assert not self.use_activ if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
-        assert not (self.train_time_activ and not isinstance(self.uactiv, nn.PReLU))
+        assert not (self.use_uactiv and self.train_time_activ and not isinstance(self.uactiv, nn.PReLU))
         print(f"{'Train time ' if self.train_time_activ else ''}{'activations being used' if self.use_activ else 'No activations being used'}")
 
     def forward(self, x):
