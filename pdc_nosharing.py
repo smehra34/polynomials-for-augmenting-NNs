@@ -166,12 +166,15 @@ class BasicBlock(nn.Module):
 
     def remove_all_activations(self):
         """Sets all activation functions in the block to identity fct"""
+        print(f"activ PReLU param before removal = {next(self.activ.parameters(), None)}")
         self.activ = nn.Identity()
         assert self.activ(torch.tensor(-100, dtype=torch.float)) == -100
 
+        print(f"lactiv PReLU param before removal = {next(self.lactiv.parameters(), None)}")
         self.lactiv = nn.Identity()
         assert self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100
 
+        print(f"uactiv PReLU param before removal = {next(self.uactiv.parameters(), None)}")
         self.uactiv = nn.Identity()
         assert self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100
 
@@ -246,6 +249,7 @@ class PDC(nn.Module):
 
     def remove_all_activations(self):
 
+        print(f"activ PReLU param before removal = {next(self.activ.parameters(), None)}")
         self.activ = nn.Identity()
         assert self.activ(torch.tensor(-100, dtype=torch.float)) == -100
         for i in range(len(self.n_channels)):
