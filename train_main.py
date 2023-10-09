@@ -82,7 +82,10 @@ def main(seed=None, use_cuda=True):
     yml = yaml.safe_load(open('pdc_so_nosharing.yml'))  # # file that includes the configuration.
     cur_path = abspath(curdir)
     # # define the output path
-    out = join(cur_path, 'results_poly', '')
+    outdir = 'results_poly'
+    if 'exp_name' in yml:
+        outdir = join(outdir, yml['exp_name'])
+    out = join(cur_path, outdir, '')
     if not isdir(out):
         makedirs(out)
 
