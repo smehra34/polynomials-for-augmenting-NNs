@@ -25,7 +25,7 @@ class BasicBlock(nn.Module):
                  norm_local=None, kern_loc=1, norm_layer=None, use_lactiv=False, norm_x=-1,
                  n_xconvs=0, what_lactiv=-1, kern_loc_so=3, use_uactiv=False, norm_bso=None,
                  use_only_first_conv=False, n_bsoconvs=0, init_a=0, planes_ho=None,
-                 train_time_activ=False, **kwargs):
+                 train_time_activ=False, activations_tracker=None, **kwargs):
         super(BasicBlock, self).__init__()
         self._norm_layer = get_norm(norm_layer)
         self._norm_local = get_norm(norm_local)
@@ -40,6 +40,7 @@ class BasicBlock(nn.Module):
         self.use_uactiv = self.use_activ and use_uactiv
         self.use_only_first_conv = use_only_first_conv
         self.train_time_activ = train_time_activ
+        self.activations_tracker = activations_tracker
 
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = self._norm_layer(planes)
@@ -163,7 +164,10 @@ class BasicBlock(nn.Module):
     def _get_activ_layer(self):
         """Returns PReLU if using train time activations, otherwise ReLU"""
         if self.train_time_activ:
-            return nn.PReLU(init=0)
+            layer = nn.PReLU(init=0)
+            if self.activations_tracker is not None:
+                self.activations_tracker.add_layer(layer)
+            return layer
         return nn.ReLU(inplace=True)
 
     def remove_all_activations(self):
@@ -184,7 +188,7 @@ class BasicBlock(nn.Module):
 
 class PDC(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10, norm_layer=None, out_activ=False, pool_adapt=False,
-                 n_channels=[64, 128, 256, 512], planes_ho=None, ch_in=3, **kwargs):
+                 n_channels=[64, 128, 256, 512], planes_ho=None, ch_in=3, activations_tracker=None, **kwargs):
         super(PDC, self).__init__()
         self.in_planes = n_channels[0]
         if norm_layer is None:
@@ -202,6 +206,8 @@ class PDC(nn.Module):
             self.avg_pool = partial(F.avg_pool2d, kernel_size=4)
         if planes_ho is None or isinstance(planes_ho, int):
             planes_ho = [planes_ho] * len(n_channels)
+
+        self.activations_tracker = activations_tracker
 
         self.conv1 = nn.Conv2d(ch_in, n_channels[0], kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = self._norm_layer(n_channels[0])
@@ -227,7 +233,9 @@ class PDC(nn.Module):
         layers = []
         for stride in strides:
             layers.append(block(self.in_planes, planes, stride,
-                                norm_layer=self._norm_layer, **kwargs))
+                                norm_layer=self._norm_layer,
+                                activations_tracker=self.activations_tracker,
+                                **kwargs))
             self.in_planes = planes * block.expansion
         # # cheeky way to get the activation from the layer1, e.g. in no activation case.
         self.activ = layers[0].activ

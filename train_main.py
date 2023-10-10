@@ -12,17 +12,19 @@ import torch
 import torch.optim as optim
 
 from utils import (save_checkpoints, load_model, return_loaders)
+from activations import ActivationsTracker
 
 torch.backends.cudnn.benchmark = True
 base = dirname(abspath(__file__))
 sys.path.append(base)
 
 
-def train(train_loader, net, optimizer, criterion, train_info, epoch, device):
+def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
+          activations_tracker=None):
     """ Perform single epoch of the training."""
     net.train()
     # # initialize variables that are augmented in every batch.
-    train_loss, correct, total = 0, 0, 0
+    train_loss, reg_loss, correct, total = 0, 0, 0, 0
     start_time = time()
     for idx, data_dict in enumerate(train_loader):
         img, label = data_dict[0], data_dict[1]
@@ -30,19 +32,32 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device):
         optimizer.zero_grad()
         pred = net(inputs)
         loss = criterion(pred, label)
+        if activations_tracker is not None:
+            reg = train_info['regularisation_w'] * activations_tracker.calc_regularisation_term()
+            if torch.isnan(reg):
+                print('Regularisation loss is nan')
+                activations_tracker.print_active_params()
+            loss +=  reg
         assert not torch.isnan(loss), 'NaN loss.'
         loss.backward()
         optimizer.step()
 
         train_loss += loss.item()
+
+        if activations_tracker is not None:
+            reg_loss += reg.item()
+            train_loss += reg.item()
+
         _, predicted = torch.max(pred.data, 1)
         total += label.size(0)
         correct += predicted.eq(label).cpu().sum()
         if idx % train_info['display_interval'] == 0:
+            reg_loss_str = '' if activations_tracker is None else f", Reg loss: {reg_loss:.04f}"
             m2 = ('Time: {:.04f}, Epoch: {}, Epoch iters: {} / {}\t'
-                  'Loss: {:.04f}, Acc: {:.06f}')
+                  'Loss: {:.04f}{}, Acc: {:.06f}')
             print(m2.format(time() - start_time, epoch, idx, len(train_loader),
-                            float(train_loss), float(correct) / total))
+                            float(train_loss), reg_loss_str,
+                            float(correct) / total))
             start_time = time()
     return net
 
@@ -93,9 +108,20 @@ def main(seed=None, use_cuda=True):
     train_loader, test_loader = return_loaders(**yml['dataset'])
     m1 = 'Current path: {}. Length of iters per epoch: {}. Length of testing batches: {}.'
     print(m1.format(cur_path, len(train_loader), len(test_loader)))
-    # # load the model.
+
     modc = yml['model']
+    # add an activations tracker object to the model args if an activation
+    # layer parameter threshold was provided
+    activations_tracker = None
+    if 'activ_param_threshold' in modc['args']:
+        activations_tracker = ActivationsTracker(param_threshold=modc['args']['activ_param_threshold'])
+        modc['args']['activations_tracker'] = activations_tracker
+    # load the model.
     net = load_model(modc['fn'], modc['name'], modc['args']).to(device)
+
+    # report number of train time activation layers being tracked
+    if activations_tracker is not None:
+        print(f"Registered {activations_tracker.num_active} train time activation layers")
 
     # # define the criterion and the optimizer.
     criterion = torch.nn.CrossEntropyLoss().to(device)
@@ -117,7 +143,12 @@ def main(seed=None, use_cuda=True):
     for epoch in range(1, tinfo['total_epochs'] + 1):
         scheduler.step()
         net = train(train_loader, net, optimizer, criterion, yml['training_info'],
-                    epoch, device)
+                    epoch, device, activations_tracker=activations_tracker)
+
+        if activations_tracker is not None:
+            activations_tracker.update_active_layers()
+            activations_tracker.print_active_params()
+
         save_checkpoints(net, optimizer, epoch, out)
         # # testing mode to evaluate accuracy.
         acc = test(net, test_loader, device=device)
@@ -136,8 +167,8 @@ def main(seed=None, use_cuda=True):
         # remove activation layers from model if using train time activ and
         # epoch threshold is reached
         if modc['args']['train_time_activ'] and epoch == tinfo['epochs_with_activations']:
-            net.remove_all_activations()
-            msg = f"\n\n----- Activations removed at epoch {epoch} -----\n\n"
+            activations_tracker.start_regularising()
+            msg = f"\n\n----- Activations now being penalised at epoch {epoch} -----\n\n"
             print(msg)
             logging.info(msg)
 
