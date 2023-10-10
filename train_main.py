@@ -73,7 +73,7 @@ def test(net, test_loader, device='cuda', verbose=False):
     for (idx, data) in enumerate(test_loader):
         if verbose:
             sys.stdout.write('\r [%d/%d]' % (idx + 1, len(test_loader)))
-            sys.stdout.flush()
+        sys.stdout.flush()
         img, label = data[0].to(device), data[1].to(device)
         with torch.no_grad():
              pred = net(img)
