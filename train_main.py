@@ -62,7 +62,7 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
     return net
 
 
-def test(net, test_loader, device='cuda'):
+def test(net, test_loader, device='cuda', verbose=False):
     """ Perform testing, i.e. run net on test_loader data
         and return the accuracy. """
     net.eval()
@@ -70,8 +70,9 @@ def test(net, test_loader, device='cuda'):
     if hasattr(net, 'is_training'):
         net.is_training = False
     for (idx, data) in enumerate(test_loader):
-        sys.stdout.write('\r [%d/%d]' % (idx + 1, len(test_loader)))
-        sys.stdout.flush()
+        if verbose:
+            sys.stdout.write('\r [%d/%d]' % (idx + 1, len(test_loader)))
+            sys.stdout.flush()
         img, label = data[0].to(device), data[1].to(device)
         with torch.no_grad():
              pred = net(img)
