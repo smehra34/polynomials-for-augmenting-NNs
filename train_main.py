@@ -7,6 +7,7 @@ import random
 from os.path import abspath, dirname, join, isdir
 from os import curdir, makedirs
 import logging
+import shutil
 
 import torch
 import torch.optim as optim
@@ -104,6 +105,8 @@ def main(seed=None, use_cuda=True):
     out = join(cur_path, outdir, '')
     if not isdir(out):
         makedirs(out)
+
+    shutil.copyfile('pdc_so_nosharing.yml', join(out, 'config.yml'))
 
     # # set the dataset options.
     train_loader, test_loader = return_loaders(**yml['dataset'])
