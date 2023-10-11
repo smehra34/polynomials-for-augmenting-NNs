@@ -88,7 +88,7 @@ class ActivationsTracker():
 
         for idx, al in enumerate(self.active_layers):
             for p in al.parameters():
-                if (p > self.param_threshold).all():
+                if (torch.abs(1 - p) < (1 - self.param_threshold)).all():
                     self._deactivate_layer(idx)
 
         self._validate_deactivated_layers()
