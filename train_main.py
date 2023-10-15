@@ -145,6 +145,15 @@ def main(seed=None, use_cuda=True):
     best_acc, best_epoch, accuracies = 0, 0, []
 
     for epoch in range(1, tinfo['total_epochs'] + 1):
+
+        # remove activation layers from model if using train time activ and
+        # epoch threshold is reached
+        if modc['args']['train_time_activ'] and epoch == tinfo['epochs_before_activ_regularisation'] + 1:
+            activations_tracker.start_regularising()
+            msg = f"\n\n----- Activations now being penalised at epoch {epoch} -----\n\n"
+            print(msg)
+            logging.info(msg)
+
         scheduler.step()
         net = train(train_loader, net, optimizer, criterion, yml['training_info'],
                     epoch, device, activations_tracker=activations_tracker)
@@ -164,17 +173,9 @@ def main(seed=None, use_cuda=True):
             best_acc = acc
             best_epoch = epoch
         accuracies.append(float(acc))
-        msg = 'Epoch:{}.\tAcc: {:.03f}.\t Best_Acc:{:.03f} (epoch: {}).'
+        msg = '\nEpoch:{}.\tAcc: {:.03f}.\t Best_Acc:{:.03f} (epoch: {}).\n'
         print(msg.format(epoch,  acc, best_acc, best_epoch))
         logging.info(msg.format(epoch, acc, best_acc, best_epoch))
-
-        # remove activation layers from model if using train time activ and
-        # epoch threshold is reached
-        if modc['args']['train_time_activ'] and epoch == tinfo['epochs_with_activations']:
-            activations_tracker.start_regularising()
-            msg = f"\n\n----- Activations now being penalised at epoch {epoch} -----\n\n"
-            print(msg)
-            logging.info(msg)
 
 
 if __name__ == '__main__':

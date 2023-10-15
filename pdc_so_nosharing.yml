@@ -31,7 +31,7 @@ model:
 
 training_info:
   total_epochs: 120
-  epochs_with_activations: 60
+  epochs_before_activ_regularisation: 0
   display_interval: 200
   lr_milestones: [40, 60, 80, 100]
   lr_gamma: 0.1
