@@ -13,7 +13,7 @@ import torch
 import torch.optim as optim
 
 from utils import (save_checkpoints, load_model, return_loaders)
-from activations import ActivationsTracker
+from activations import ActivationsTracker, RegularisationWeightScheduler
 
 torch.backends.cudnn.benchmark = True
 base = dirname(abspath(__file__))
@@ -21,7 +21,7 @@ sys.path.append(base)
 
 
 def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
-          activations_tracker=None):
+          activations_tracker=None, reg_w_scheduler=None):
     """ Perform single epoch of the training."""
     net.train()
     # # initialize variables that are augmented in every batch.
@@ -60,6 +60,10 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
                             float(train_loss), reg_loss_str,
                             float(correct) / total))
             start_time = time()
+
+    if reg_w_scheduler is not None:
+        reg_w_scheduler.add_loss(reg_loss)
+
     return net
 
 
@@ -117,8 +121,8 @@ def main(seed=None, use_cuda=True):
     # add an activations tracker object to the model args if an activation
     # layer parameter threshold was provided
     activations_tracker = None
-    if 'activ_param_threshold' in modc['args']:
-        activations_tracker = ActivationsTracker(param_threshold=modc['args']['activ_param_threshold'])
+    if 'train_time_activations' in yml['training_info']:
+        activations_tracker = ActivationsTracker(**yml['training_info']['train_time_activations'])
         modc['args']['activations_tracker'] = activations_tracker
     # load the model.
     net = load_model(modc['fn'], modc['name'], modc['args']).to(device)
@@ -142,21 +146,28 @@ def main(seed=None, use_cuda=True):
     mil = tinfo['lr_milestones'] if 'lr_milestones' in tinfo.keys() else [40, 60, 80, 100]
     gamma = tinfo['lr_gamma'] if 'lr_gamma' in tinfo.keys() else 0.1
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=mil, gamma=gamma)
+    reg_w_scheduler = None
     best_acc, best_epoch, accuracies = 0, 0, []
 
     for epoch in range(1, tinfo['total_epochs'] + 1):
 
         # remove activation layers from model if using train time activ and
         # epoch threshold is reached
-        if modc['args']['train_time_activ'] and epoch == tinfo['epochs_before_activ_regularisation'] + 1:
-            activations_tracker.start_regularising(tinfo['regularisation_w'])
-            msg = f"\n\n----- Activations now being penalised at epoch {epoch} with weight {tinfo['regularisation_w']} -----\n\n"
+        if modc['args']['train_time_activ'] and epoch == tinfo['train_time_activations']['epochs_before_regularisation'] + 1:
+            activations_tracker.start_regularising()
+            msg = f"\n\n----- Activations now being penalised at epoch {epoch} with weight {activations_tracker.regularisation_w} -----\n\n"
             print(msg)
             logging.info(msg)
 
+            # if reg weight scheduler specified in config, create this
+            if 'scheduler' in tinfo['train_time_activations']:
+                reg_w_scheduler = RegularisationWeightScheduler(activations_tracker,
+                                                                **tinfo['train_time_activations']['scheduler'])
+
         scheduler.step()
         net = train(train_loader, net, optimizer, criterion, yml['training_info'],
-                    epoch, device, activations_tracker=activations_tracker)
+                    epoch, device, activations_tracker=activations_tracker,
+                    reg_w_scheduler=reg_w_scheduler)
 
         if activations_tracker is not None:
             activations_tracker.update_active_layers()

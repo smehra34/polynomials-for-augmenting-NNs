@@ -5,7 +5,7 @@ import torch.nn as nn
 
 class ActivationsTracker():
 
-    def __init__(self, param_threshold=0.99):
+    def __init__(self, param_threshold=0.99, init_regularisation_w=0.003, **kwargs):
         '''
         :param param_threshold: float; threshold above which the PReLU layer is deactivated
         '''
@@ -16,7 +16,7 @@ class ActivationsTracker():
         self.init_num_active = 0
         self.param_threshold = param_threshold
         self.regularise = False
-        self.regularisation_w = 0
+        self.regularisation_w = init_regularisation_w
 
 
     def add_layer(self, layer):
@@ -26,10 +26,9 @@ class ActivationsTracker():
         self.init_num_active += 1
 
 
-    def start_regularising(self, initial_w):
+    def start_regularising(self):
 
         self.regularise = True
-        self.regularisation_w = initial_w
 
 
     def _sparsity_loss(self, params):
@@ -94,3 +93,51 @@ class ActivationsTracker():
                     self._deactivate_layer(idx)
 
         self._validate_deactivated_layers()
+
+
+class RegularisationWeightScheduler():
+
+    def __init__(self, activations_tracker, increase_factor=2, patience=10,
+                 verbose=True):
+        '''
+        :param activations_tracker: ActivationsTracker;
+        :param increase_factor: float; factor by which to increase regularisation weight
+        :param patience: int; number of epochs without improvement before increasing w
+        :param verbose: bool; whether to print a message at each weight update
+        '''
+
+        self.activations_tracker = activations_tracker
+        self.increase_factor = increase_factor
+        self.patience = patience
+        self.verbose = verbose
+        self.losses = []
+
+
+    def add_loss(self, loss):
+
+        self.losses.append(loss)
+
+        # only track the number of losses we need based on the patience
+        if len(self.losses) >= self.patience:
+            self.losses[-self.patience:]
+
+            if not self._is_improving():
+
+                self._update_w()
+
+                if self.verbose:
+                    print(f"Regularisation losses have not improved in {self.patience} epochs.")
+                    print(['%.4f' % l for l in self.losses])
+                    print(f"New regularisation weight is {self.activations_tracker.regularisation_w:0.4f}")
+
+                self.losses = []
+
+    def _is_improving(self):
+
+        # if oldest tracked loss (assuming loss buffer is full) is the smallest,
+        # means there has been no improvement since <patience> epochs
+        return self.losses[0] != min(self.losses)
+
+    def _update_w(self):
+
+        self.activations_tracker.regularisation_w *= self.increase_factor

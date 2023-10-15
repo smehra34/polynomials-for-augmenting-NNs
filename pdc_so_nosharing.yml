@@ -27,12 +27,16 @@ model:
     planes_ho:  [64, 64, 128, 128]
     use_only_first_conv: True
     train_time_activ: True
-    activ_param_threshold: 0.99
 
 training_info:
   total_epochs: 120
-  epochs_before_activ_regularisation: 0
   display_interval: 200
   lr_milestones: [40, 60, 80, 100]
   lr_gamma: 0.1
-  regularisation_w: 0.003
+  train_time_activations:
+    param_threshold: 0.99
+    epochs_before_regularisation: 0
+    init_regularisation_w: 0.01
+    scheduler:
+      increase_factor: 2
+      patience: 10
