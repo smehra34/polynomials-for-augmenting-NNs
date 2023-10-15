@@ -34,7 +34,7 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
         pred = net(inputs)
         loss = criterion(pred, label)
         if activations_tracker is not None:
-            reg = train_info['regularisation_w'] * activations_tracker.calc_regularisation_term()
+            reg = activations_tracker.calc_regularisation_term()
             if torch.isnan(reg):
                 print('Regularisation loss is nan')
                 activations_tracker.print_active_params()
@@ -149,8 +149,8 @@ def main(seed=None, use_cuda=True):
         # remove activation layers from model if using train time activ and
         # epoch threshold is reached
         if modc['args']['train_time_activ'] and epoch == tinfo['epochs_before_activ_regularisation'] + 1:
-            activations_tracker.start_regularising()
-            msg = f"\n\n----- Activations now being penalised at epoch {epoch} -----\n\n"
+            activations_tracker.start_regularising(tinfo['regularisation_w'])
+            msg = f"\n\n----- Activations now being penalised at epoch {epoch} with weight {tinfo['regularisation_w']} -----\n\n"
             print(msg)
             logging.info(msg)
 

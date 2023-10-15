@@ -16,6 +16,7 @@ class ActivationsTracker():
         self.init_num_active = 0
         self.param_threshold = param_threshold
         self.regularise = False
+        self.regularisation_w = 0
 
 
     def add_layer(self, layer):
@@ -25,9 +26,10 @@ class ActivationsTracker():
         self.init_num_active += 1
 
 
-    def start_regularising(self):
+    def start_regularising(self, initial_w):
 
         self.regularise = True
+        self.regularisation_w = initial_w
 
 
     def _sparsity_loss(self, params):
@@ -47,7 +49,7 @@ class ActivationsTracker():
             for p in al.parameters():
                 reg_loss += self._sparsity_loss(p)
 
-        return reg_loss
+        return reg_loss * self.regularisation_w
 
     def print_active_params(self):
 
