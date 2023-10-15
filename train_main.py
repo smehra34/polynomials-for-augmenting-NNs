@@ -61,9 +61,6 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
                             float(correct) / total))
             start_time = time()
 
-    if reg_w_scheduler is not None:
-        reg_w_scheduler.add_loss(reg_loss)
-
     return net
 
 
@@ -172,6 +169,9 @@ def main(seed=None, use_cuda=True):
         if activations_tracker is not None:
             activations_tracker.update_active_layers()
             activations_tracker.print_active_params()
+
+            if reg_w_scheduler is not None:
+                reg_w_scheduler.step()
 
         save_checkpoints(net, optimizer, epoch, out)
         # # testing mode to evaluate accuracy.

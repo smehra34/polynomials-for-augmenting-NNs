@@ -98,7 +98,7 @@ class ActivationsTracker():
 class RegularisationWeightScheduler():
 
     def __init__(self, activations_tracker, increase_factor=2, patience=10,
-                 verbose=True):
+                 verbose=True, mode='min'):
         '''
         :param activations_tracker: ActivationsTracker;
         :param increase_factor: float; factor by which to increase regularisation weight
@@ -110,33 +110,38 @@ class RegularisationWeightScheduler():
         self.increase_factor = increase_factor
         self.patience = patience
         self.verbose = verbose
-        self.losses = []
+        self.mode = mode
+        self.metric_values = []
 
 
-    def add_loss(self, loss):
+    def step(self):
 
-        self.losses.append(loss)
+        self.metric_values.append(self.activations_tracker.num_active)
 
-        # only track the number of losses we need based on the patience
-        if len(self.losses) >= self.patience:
-            self.losses[-self.patience:]
+        # only track the number of values we need based on the patience
+        if len(self.metric_values) >= self.patience:
+            self.metric_values[-self.patience:]
 
             if not self._is_improving():
 
                 self._update_w()
 
                 if self.verbose:
+                    print('\n')
                     print(f"Regularisation losses have not improved in {self.patience} epochs.")
-                    print(['%.4f' % l for l in self.losses])
+                    print(self.metric_values)
                     print(f"New regularisation weight is {self.activations_tracker.regularisation_w:0.4f}")
+                    print('\n')
 
-                self.losses = []
+                self.metric_values = []
 
     def _is_improving(self):
 
-        # if oldest tracked loss (assuming loss buffer is full) is the smallest,
-        # means there has been no improvement since <patience> epochs
-        return self.losses[0] != min(self.losses)
+        # if oldest tracked metric (assuming loss buffer is full) is the
+        # min/max (depending on mode), means there has been no improvement
+        # since <patience> epochs
+        fct = min if self.mode == 'min' else max
+        return self.metric_values[0] != fct(self.metric_values)
 
     def _update_w(self):
 
