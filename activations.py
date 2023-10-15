@@ -120,7 +120,7 @@ class RegularisationWeightScheduler():
 
         # only track the number of values we need based on the patience
         if len(self.metric_values) >= self.patience:
-            self.metric_values[-self.patience:]
+            self.metric_values = self.metric_values[-self.patience:]
 
             if not self._is_improving():
 
