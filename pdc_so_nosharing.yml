@@ -1,7 +1,7 @@
 comment: '7/2022: Used for the ECCV --- compressed version (4.3 mil params).'
 learning_rate: 0.1
 
-exp_name: 60_epoch_tta
+exp_name: sched_initw_01_factor_2_patience_5
 
 dataset:
   root: /tmp/
@@ -39,4 +39,4 @@ training_info:
     init_regularisation_w: 0.01
     scheduler:
       increase_factor: 2
-      patience: 10
+      patience: 5

@@ -180,6 +180,12 @@ def main(seed=None, use_cuda=True):
             out_path = join(out, 'net_best_1.pth')
             state = {'net': net.state_dict(), 'acc': acc,
                      'epoch': epoch, 'n_params': total_params}
+
+            if activations_tracker is not None:
+                state['active_activations'] = activations_tracker.num_active
+                state['init_activations'] = activations_tracker.init_num_active
+                state['regularisation_w'] = activations_tracker.regularisation_w
+
             torch.save(state, out_path)
             best_acc = acc
             best_epoch = epoch
