@@ -39,6 +39,7 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
             if torch.isnan(reg):
                 print('Regularisation loss is nan')
                 activations_tracker.print_active_params()
+                sys.stdout.flush()
             loss +=  reg
         assert not torch.isnan(loss), 'NaN loss.'
         loss.backward()
