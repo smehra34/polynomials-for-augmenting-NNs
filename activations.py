@@ -2,6 +2,10 @@
 
 import torch
 import torch.nn as nn
+import pickle
+import os
+import matplotlib.pyplot as plt
+import numpy as np
 
 class ActivationsTracker():
 
@@ -146,3 +150,51 @@ class RegularisationWeightScheduler():
     def _update_w(self):
 
         self.activations_tracker.regularisation_w *= self.increase_factor
+
+
+class ActivationsVisualiser():
+
+
+    def __init__(self, net):
+        '''
+        :param net: torch.nn.Module;
+        '''
+
+        self.activ_layers = [l for l in net.state_dict().keys() if 'activ' in l]
+        self.values = {l:[] for l in self.activ_layers}
+        self.step(net)
+
+    def step(self, net):
+
+        net_state = net.state_dict()
+        for al in self.activ_layers:
+            self.values[al].append(net_state[al].item())
+
+    def save_values(self, outdir):
+
+        with open(os.path.join(outdir, 'activ_param_values.pkl'), 'wb') as fp:
+            pickle.dump(self.values, fp)
+        self.plot_values(outdir)
+
+
+    def plot_values(self, outdir):
+
+        max_dist = 0
+        for al in self.activ_layers:
+            self.values[al] = [abs(1-v) for v in self.values[al]]
+            max_dist = max(max_dist, max(self.values[al]))
+
+        plt.imshow(self.values.values(), cmap='viridis', vmin=0, vmax=max_dist, aspect='auto')
+
+        plt.yticks(np.arange(len(self.values)), list(self.values.keys()))
+        plt.ylabel('Activation layer', fontsize=12)
+
+        x_ticks_step = max(1, len(self.values[al]) // 20)
+        plt.xticks(np.arange(0, len(self.values[al]), step=x_ticks_step),
+                   [str(i) for i in range(0, len(self.values[al]), x_ticks_step)])
+        plt.xlabel('Epoch', fontsize=12)
+
+        plt.colorbar(label='| 1 - α |')
+        plt.tight_layout()
+
+        plt.savefig(os.path.join(outdir, 'activations_heatmap.png'))

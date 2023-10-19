@@ -13,7 +13,8 @@ import torch
 import torch.optim as optim
 
 from utils import (save_checkpoints, load_model, return_loaders)
-from activations import ActivationsTracker, RegularisationWeightScheduler
+from activations import (ActivationsTracker, RegularisationWeightScheduler,
+                         ActivationsVisualiser)
 
 torch.backends.cudnn.benchmark = True
 base = dirname(abspath(__file__))
@@ -127,6 +128,7 @@ def main(seed=None, use_cuda=True):
     # report number of train time activation layers being tracked
     if activations_tracker is not None:
         print(f"Registered {activations_tracker.num_active} train time activation layers")
+        activations_visualiser = ActivationsVisualiser(net)
 
     # # define the criterion and the optimizer.
     criterion = torch.nn.CrossEntropyLoss().to(device)
@@ -169,6 +171,9 @@ def main(seed=None, use_cuda=True):
         if activations_tracker is not None:
             activations_tracker.update_active_layers()
             activations_tracker.print_active_params()
+
+            activations_visualiser.step(net)
+            activations_visualiser.save_values(out)
 
             if reg_w_scheduler is not None:
                 reg_w_scheduler.step()
