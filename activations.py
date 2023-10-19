@@ -180,21 +180,23 @@ class ActivationsVisualiser():
     def plot_values(self, outdir):
 
         max_dist = 0
+        values = {}
         for al in self.activ_layers:
-            self.values[al] = [abs(1-v) for v in self.values[al]]
-            max_dist = max(max_dist, max(self.values[al]))
+            values[al] = [abs(1-v) for v in self.values[al]]
+            max_dist = max(max_dist, max(values[al]))
 
-        plt.imshow(self.values.values(), cmap='viridis', vmin=0, vmax=max_dist, aspect='auto')
+        plt.imshow(values.values(), cmap='viridis', vmin=0, vmax=max_dist, aspect='auto')
 
-        plt.yticks(np.arange(len(self.values)), list(self.values.keys()))
+        plt.yticks(np.arange(len(values)), list(values.keys()))
         plt.ylabel('Activation layer', fontsize=12)
 
-        x_ticks_step = max(1, len(self.values[al]) // 20)
-        plt.xticks(np.arange(0, len(self.values[al]), step=x_ticks_step),
-                   [str(i) for i in range(0, len(self.values[al]), x_ticks_step)])
+        x_ticks_step = max(1, len(values[al]) // 20)
+        plt.xticks(np.arange(0, len(values[al]), step=x_ticks_step),
+                   [str(i) for i in range(0, len(values[al]), x_ticks_step)])
         plt.xlabel('Epoch', fontsize=12)
 
         plt.colorbar(label='| 1 - α |')
         plt.tight_layout()
 
         plt.savefig(os.path.join(outdir, 'activations_heatmap.png'))
+        plt.clf()
