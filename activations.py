@@ -200,3 +200,36 @@ class ActivationsVisualiser():
 
         plt.savefig(os.path.join(outdir, 'activations_heatmap.png'))
         plt.clf()
+
+
+# define as global var to make it like a singleton since we want a shared layer
+# everywhere
+SHARED_LEAKYRELU_LAYER = nn.LeakyReLU(negative_slope=0, inplace=True)
+
+class ActivationIncrementer():
+
+    def __init__(self, start_increment_epoch, end_increment_epoch, **kwargs):
+        '''
+        :param start_increment_epoch: int; when to start incrementing leakyrelu slope
+        :param end_increment_epoch: int; when to stop incrementing leakyrelu slope
+        '''
+
+        self.start_epoch = start_increment_epoch
+        self.end_epoch = end_increment_epoch
+        self.current_epoch = 0
+        self.increment = 1 / (self.end_epoch - self.start_epoch)
+
+    def step(self):
+
+        self.current_epoch += 1
+        if self.current_epoch <= self.start_epoch:
+            SHARED_LEAKYRELU_LAYER.negative_slope = 0
+
+        elif self.current_epoch >= self.end_epoch:
+            SHARED_LEAKYRELU_LAYER.negative_slope = 1
+
+        else:
+            SHARED_LEAKYRELU_LAYER.negative_slope += self.increment
+
+        assert(SHARED_LEAKYRELU_LAYER.negative_slope <= 1)
+        print(f"LeakyReLU slope (epoch {self.current_epoch}): {SHARED_LEAKYRELU_LAYER.negative_slope}")

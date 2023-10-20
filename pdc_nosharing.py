@@ -5,6 +5,7 @@ from functools import partial
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from activations import SHARED_LEAKYRELU_LAYER
 
 
 def get_norm(norm_local):
@@ -25,7 +26,7 @@ class BasicBlock(nn.Module):
                  norm_local=None, kern_loc=1, norm_layer=None, use_lactiv=False, norm_x=-1,
                  n_xconvs=0, what_lactiv=-1, kern_loc_so=3, use_uactiv=False, norm_bso=None,
                  use_only_first_conv=False, n_bsoconvs=0, init_a=0, planes_ho=None,
-                 train_time_activ=False, activations_tracker=None, **kwargs):
+                 train_time_activ=None, activations_tracker=None, **kwargs):
         super(BasicBlock, self).__init__()
         self._norm_layer = get_norm(norm_layer)
         self._norm_local = get_norm(norm_local)
@@ -60,7 +61,8 @@ class BasicBlock(nn.Module):
 
         assert not self.use_activ if self.activ(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
         assert not (self.train_time_activ and not self.use_activ), 'use_activ must be True to use train time activations'
-        assert not (self.train_time_activ and not isinstance(self.activ, nn.PReLU))
+        assert not (self.train_time_activ == 'regularised' and not isinstance(self.activ, nn.PReLU))
+        assert not (self.train_time_activ == 'fixed_increment' and not isinstance(self.activ, nn.LeakyReLU))
 
         self.use_alpha = use_alpha
         if self.use_alpha:
@@ -81,11 +83,12 @@ class BasicBlock(nn.Module):
             ac1 = self._get_activ_layer()
             ac2 = self._get_activ_layer()
             if what_lactiv != -1:
-                print('Overriding what_lactiv parameter and using PReLU since train_time_activ is True')
+                print(f"Overriding what_lactiv parameter and using {type(ac1).__name__} since train_time_activ is set to {self.train_time_activ}")
 
         self.lactiv = ac1 if self.use_lactiv else lambda x: x
         assert not self.use_activ if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
-        assert not (self.use_lactiv and self.train_time_activ and not isinstance(self.lactiv, nn.PReLU))
+        assert not (self.use_lactiv and self.train_time_activ == 'regularised' and not isinstance(self.lactiv, nn.PReLU))
+        assert not (self.use_lactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.lactiv, nn.LeakyReLU))
 
         # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
@@ -100,7 +103,9 @@ class BasicBlock(nn.Module):
         self.uactiv = ac2 if self.use_uactiv else lambda x: x
 
         assert not self.use_activ if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
-        assert not (self.use_uactiv and self.train_time_activ and not isinstance(self.uactiv, nn.PReLU))
+        assert not (self.use_uactiv and self.train_time_activ == 'regularised' and not isinstance(self.uactiv, nn.PReLU))
+        assert not (self.use_uactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.uactiv, nn.LeakyReLU))
+
         print(f"{'Train time ' if self.train_time_activ else ''}{'activations being used' if self.use_activ else 'No activations being used'}")
 
     def forward(self, x):
@@ -163,11 +168,13 @@ class BasicBlock(nn.Module):
 
     def _get_activ_layer(self):
         """Returns PReLU if using train time activations, otherwise ReLU"""
-        if self.train_time_activ:
+        if self.train_time_activ == 'regularised':
             layer = nn.PReLU(init=0)
             if self.activations_tracker is not None:
                 self.activations_tracker.add_layer(layer)
             return layer
+        elif self.train_time_activ == 'fixed_increment':
+            return SHARED_LEAKYRELU_LAYER
         return nn.ReLU(inplace=True)
 
     def remove_all_activations(self):

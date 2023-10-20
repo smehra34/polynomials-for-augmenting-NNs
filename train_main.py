@@ -14,7 +14,7 @@ import torch.optim as optim
 
 from utils import (save_checkpoints, load_model, return_loaders)
 from activations import (ActivationsTracker, RegularisationWeightScheduler,
-                         ActivationsVisualiser)
+                         ActivationsVisualiser, ActivationIncrementer)
 
 torch.backends.cudnn.benchmark = True
 base = dirname(abspath(__file__))
@@ -120,9 +120,13 @@ def main(seed=None, use_cuda=True):
     # add an activations tracker object to the model args if an activation
     # layer parameter threshold was provided
     activations_tracker = None
-    if 'train_time_activations' in yml['training_info']:
+    if modc['args']['train_time_activ'] == 'regularised':
         activations_tracker = ActivationsTracker(**yml['training_info']['train_time_activations'])
         modc['args']['activations_tracker'] = activations_tracker
+
+    elif modc['args']['train_time_activ'] == 'fixed_increment':
+        activation_incrementer = ActivationIncrementer(**yml['training_info']['train_time_activations'])
+
     # load the model.
     net = load_model(modc['fn'], modc['name'], modc['args']).to(device)
 
@@ -151,9 +155,9 @@ def main(seed=None, use_cuda=True):
 
     for epoch in range(1, tinfo['total_epochs'] + 1):
 
-        # remove activation layers from model if using train time activ and
-        # epoch threshold is reached
-        if modc['args']['train_time_activ'] and epoch == tinfo['train_time_activations']['epochs_before_regularisation'] + 1:
+        # remove activation layers from model if using regularised train time
+        # activ and epoch threshold is reached
+        if modc['args']['train_time_activ'] == 'regularised' and epoch == tinfo['train_time_activations']['epochs_before_regularisation'] + 1:
             activations_tracker.start_regularising()
             msg = f"\n\n----- Activations now being penalised at epoch {epoch} with weight {activations_tracker.regularisation_w} -----\n\n"
             print(msg)
@@ -163,6 +167,9 @@ def main(seed=None, use_cuda=True):
             if 'scheduler' in tinfo['train_time_activations']:
                 reg_w_scheduler = RegularisationWeightScheduler(activations_tracker,
                                                                 **tinfo['train_time_activations']['scheduler'])
+
+        elif modc['args']['train_time_activ'] == 'fixed_increment':
+            activation_incrementer.step()
 
         scheduler.step()
         net = train(train_loader, net, optimizer, criterion, yml['training_info'],
