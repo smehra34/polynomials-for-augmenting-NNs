@@ -1,7 +1,7 @@
 comment: '7/2022: Used for the ECCV --- compressed version (4.3 mil params).'
 learning_rate: 0.1
 
-exp_name: fixed_increment_10_40
+exp_name: fixed_increment_1_60_patience_5
 
 dataset:
   root: /tmp/
@@ -34,8 +34,9 @@ training_info:
   lr_milestones: [40, 60, 80, 100]
   lr_gamma: 0.1
   train_time_activations:
-    start_increment_epoch: 10
-    end_increment_epoch: 40
+    start_increment_epoch: 1
+    end_increment_epoch: 60
+    increment_patience: 5
     param_threshold: 0.99
     epochs_before_regularisation: 0
     init_regularisation_w: 0.01

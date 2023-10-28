@@ -208,16 +208,20 @@ SHARED_LEAKYRELU_LAYER = nn.LeakyReLU(negative_slope=0, inplace=True)
 
 class ActivationIncrementer():
 
-    def __init__(self, start_increment_epoch, end_increment_epoch, **kwargs):
+    def __init__(self, start_increment_epoch, end_increment_epoch,
+                 increment_patience=1, **kwargs):
         '''
         :param start_increment_epoch: int; when to start incrementing leakyrelu slope
         :param end_increment_epoch: int; when to stop incrementing leakyrelu slope
+        :param increment_patience: int; number of epochs to wait before incrementing again
         '''
 
         self.start_epoch = start_increment_epoch
         self.end_epoch = end_increment_epoch
+        self.increment_patience = increment_patience
         self.current_epoch = 0
-        self.increment = 1 / (self.end_epoch - self.start_epoch)
+        self.epochs_since_increment = 0
+        self.increment = increment_patience / (self.end_epoch - self.start_epoch)
 
     def step(self):
 
@@ -229,7 +233,11 @@ class ActivationIncrementer():
             SHARED_LEAKYRELU_LAYER.negative_slope = 1
 
         else:
-            SHARED_LEAKYRELU_LAYER.negative_slope += self.increment
+            if self.epochs_since_increment >= self.increment_patience:
+                SHARED_LEAKYRELU_LAYER.negative_slope += self.increment
+                self.epochs_since_increment = 0
+                
+            self.epochs_since_increment += 1
 
         assert(SHARED_LEAKYRELU_LAYER.negative_slope <= 1)
         print(f"LeakyReLU slope (epoch {self.current_epoch}): {SHARED_LEAKYRELU_LAYER.negative_slope}")
