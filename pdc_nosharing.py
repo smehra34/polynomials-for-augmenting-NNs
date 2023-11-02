@@ -53,8 +53,9 @@ class BasicBlock(nn.Module):
                 self._norm_layer(self.expansion*planes)
             )
             planes1 = self.expansion * planes
-        al = nn.PReLU(init=0)
-        al.weight.requires_grad = False
+        #al = nn.PReLU(init=0)
+        #al.weight.requires_grad = False
+        al = nn.LeakyReLU(negative_slope=0, inplace=True)
         self.activ = partial(al) if self.use_activ else lambda x: x
         self.use_alpha = use_alpha
         if self.use_alpha:
@@ -63,8 +64,9 @@ class BasicBlock(nn.Module):
         self.normx = self._norm_x(planes1)
         if 1:
             if what_lactiv == -1:
-                ac1 = nn.PReLU(init=0)
-                ac1.weight.requires_grad = False
+                #ac1 = nn.PReLU(init=0)
+                #ac1.weight.requires_grad = False
+                ac1 = nn.LeakyReLU(negative_slope=0, inplace=True)
             elif what_lactiv == 1:
                 ac1 = nn.Softmax2d()
             elif what_lactiv == 2:
@@ -179,8 +181,9 @@ class PDC(nn.Module):
         self.linear = nn.Linear(n_channels[-1] * block.expansion, num_classes)
         # # if linear case and requested, include an output non-linearity.
         cond = self.out_activ and self.activ(torch.tensor(-100)) == -100
-        al = nn.PReLU(init=0)
-        al.weight.requires_grad = False
+        #al = nn.PReLU(init=0)
+        #al.weight.requires_grad = False
+        al = nn.LeakyReLU(negative_slope=0, inplace=True)
         self.oactiv = partial(al) if cond else lambda x: x
         print('output non-linearity: #', self.out_activ, cond)
 
