@@ -6,6 +6,7 @@ from time import time
 import random
 from os.path import abspath, dirname, join, isdir
 from os import curdir, makedirs
+import shutil
 import logging
 
 import torch
@@ -47,7 +48,7 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device):
     return net
 
 
-def test(net, test_loader, device='cuda'):
+def test(net, test_loader, device='cuda', verbose=False):
     """ Perform testing, i.e. run net on test_loader data
         and return the accuracy. """
     net.eval()
@@ -55,7 +56,8 @@ def test(net, test_loader, device='cuda'):
     if hasattr(net, 'is_training'):
         net.is_training = False
     for (idx, data) in enumerate(test_loader):
-        sys.stdout.write('\r [%d/%d]' % (idx + 1, len(test_loader)))
+        if verbose:
+            sys.stdout.write('\r [%d/%d]' % (idx + 1, len(test_loader)))
         sys.stdout.flush()
         img, label = data[0].to(device), data[1].to(device)
         with torch.no_grad():
@@ -81,9 +83,14 @@ def main(seed=None, use_cuda=True):
     yml = yaml.safe_load(open('pdc_so_nosharing.yml'))  # # file that includes the configuration.
     cur_path = abspath(curdir)
     # # define the output path
-    out = join(cur_path, 'results_poly', '')
+    outdir = 'results_poly'
+    if 'exp_name' in yml:
+        outdir = join(outdir, yml['exp_name'])
+    out = join(cur_path, outdir, '')
     if not isdir(out):
         makedirs(out)
+
+    shutil.copyfile('pdc_so_nosharing.yml', join(out, 'config.yml'))
 
     # # set the dataset options.
     train_loader, test_loader = return_loaders(**yml['dataset'])
@@ -112,25 +119,23 @@ def main(seed=None, use_cuda=True):
 
     for epoch in range(1, tinfo['total_epochs'] + 1):
         scheduler.step()
-        net = train(train_loader, net, optimizer, criterion, yml['training_info'], 
+        net = train(train_loader, net, optimizer, criterion, yml['training_info'],
                     epoch, device)
         save_checkpoints(net, optimizer, epoch, out)
-        # # testing mode to evaluate accuracy. 
+        # # testing mode to evaluate accuracy.
         acc = test(net, test_loader, device=device)
         if acc > best_acc:
             out_path = join(out, 'net_best_1.pth')
-            state = {'net': net.state_dict(), 'acc': acc, 
+            state = {'net': net.state_dict(), 'acc': acc,
                      'epoch': epoch, 'n_params': total_params}
             torch.save(state, out_path)
             best_acc = acc
             best_epoch = epoch
         accuracies.append(float(acc))
-        msg = 'Epoch:{}.\tAcc: {:.03f}.\t Best_Acc:{:.03f} (epoch: {}).'
+        msg = '\nEpoch:{}.\tAcc: {:.03f}.\t Best_Acc:{:.03f} (epoch: {}).\n'
         print(msg.format(epoch,  acc, best_acc, best_epoch))
         logging.info(msg.format(epoch, acc, best_acc, best_epoch))
 
 
 if __name__ == '__main__':
     main()
-
-

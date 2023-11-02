@@ -1,6 +1,8 @@
 comment: '7/2022: Used for the ECCV --- compressed version (4.3 mil params).'
 learning_rate: 0.1
 
+exp_name: default_with_fixed_prelu_0
+
 dataset:
   root: /tmp/
   batch_size: 128
