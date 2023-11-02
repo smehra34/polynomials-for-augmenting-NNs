@@ -21,7 +21,7 @@ def get_norm(norm_local):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, use_activ=True, use_alpha=False, n_lconvs=0, 
+    def __init__(self, in_planes, planes, stride=1, use_activ=True, use_alpha=False, n_lconvs=0,
                  norm_local=None, kern_loc=1, norm_layer=None, use_lactiv=False, norm_x=-1,
                  n_xconvs=0, what_lactiv=-1, kern_loc_so=3, use_uactiv=False, norm_bso=None,
                  use_only_first_conv=False, n_bsoconvs=0, init_a=0, planes_ho=None, **kwargs):
@@ -53,7 +53,9 @@ class BasicBlock(nn.Module):
                 self._norm_layer(self.expansion*planes)
             )
             planes1 = self.expansion * planes
-        self.activ = partial(nn.ReLU(inplace=True)) if self.use_activ else lambda x: x
+        self.activ = partial(nn.PReLU(init=0)) if self.use_activ else lambda x: x
+        if self.use_activ:
+            self.activ.weight.requires_grad = False
         self.use_alpha = use_alpha
         if self.use_alpha:
             self.alpha = nn.Parameter(torch.ones(1) * init_a)
@@ -61,7 +63,8 @@ class BasicBlock(nn.Module):
         self.normx = self._norm_x(planes1)
         if 1:
             if what_lactiv == -1:
-                ac1 = nn.ReLU(inplace=True)
+                ac1 = nn.PReLU(init=0)
+                ac1.weight.requires_grad = False
             elif what_lactiv == 1:
                 ac1 = nn.Softmax2d()
             elif what_lactiv == 2:
@@ -176,7 +179,9 @@ class PDC(nn.Module):
         self.linear = nn.Linear(n_channels[-1] * block.expansion, num_classes)
         # # if linear case and requested, include an output non-linearity.
         cond = self.out_activ and self.activ(torch.tensor(-100)) == -100
-        self.oactiv = partial(nn.ReLU(inplace=True)) if cond else lambda x: x
+        self.oactiv = partial(nn.PReLU(init=0)) if cond else lambda x: x
+        if cond:
+            self.oactiv.weight.requires_grad = False
         print('output non-linearity: #', self.out_activ, cond)
 
 
@@ -184,7 +189,7 @@ class PDC(nn.Module):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, stride, 
+            layers.append(block(self.in_planes, planes, stride,
                                 norm_layer=self._norm_layer, **kwargs))
             self.in_planes = planes * block.expansion
         # # cheeky way to get the activation from the layer1, e.g. in no activation case.
@@ -211,5 +216,3 @@ def PDC_wrapper(num_blocks=None, **kwargs):
     if num_blocks is None:
         num_blocks = [1, 1, 1, 1]
     return PDC(BasicBlock, num_blocks, **kwargs)
-
-
