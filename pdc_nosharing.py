@@ -56,7 +56,7 @@ class BasicBlock(nn.Module):
         #al = nn.PReLU(init=0)
         #al.weight.requires_grad = False
         al = nn.LeakyReLU(negative_slope=0, inplace=True)
-        self.activ = partial(al) if self.use_activ else lambda x: x
+        self.activ = al if self.use_activ else lambda x: x
         self.use_alpha = use_alpha
         if self.use_alpha:
             self.alpha = nn.Parameter(torch.ones(1) * init_a)
@@ -73,7 +73,7 @@ class BasicBlock(nn.Module):
                 ac1 = nn.LeakyReLU(inplace=True)
             elif what_lactiv == 3:
                 ac1 = torch.tanh
-        self.lactiv = partial(ac1) if self.use_lactiv else lambda x: x
+        self.lactiv = ac1 if self.use_lactiv else lambda x: x
         # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
             planes_ho = planes1
@@ -84,7 +84,7 @@ class BasicBlock(nn.Module):
         #self.def_local_convs(planes1, n_xconvs, kern_loc, self._norm_x, key='x')
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=1, out_planes=planes_ho)
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
-        self.uactiv = partial(ac1) if self.use_uactiv else lambda x: x
+        self.uactiv = ac1 if self.use_uactiv else lambda x: x
 
     def forward(self, x):
         out = self.activ(self.bn1(self.conv1(x)))
@@ -184,7 +184,7 @@ class PDC(nn.Module):
         #al = nn.PReLU(init=0)
         #al.weight.requires_grad = False
         al = nn.LeakyReLU(negative_slope=0, inplace=True)
-        self.oactiv = partial(al) if cond else lambda x: x
+        self.oactiv = al if cond else lambda x: x
         print('output non-linearity: #', self.out_activ, cond)
 
 
