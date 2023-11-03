@@ -15,7 +15,7 @@ def load_module(fn, name):
 def load_model(model_fn, model_name, args=None):
     model = load_module(model_fn, model_name)
     model1 = model(**args) if args else model()
-    if pretrained_params_path in args:
+    if 'pretrained_params_path' in args:
         model1.load_state_dict(torch.load(args['pretrained_params_path'])['net'])
     return model1
 
