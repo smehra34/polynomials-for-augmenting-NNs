@@ -27,6 +27,7 @@ model:
     planes_ho:  [64, 64, 128, 128]
     use_only_first_conv: True
     train_time_activ: 'fixed_increment' # None, 'fixed_increment', or 'regularised'
+    pretrained_params_path: results_poly/prelu_fixed_04/latest.pth80.tar
 
 training_info:
   total_epochs: 120

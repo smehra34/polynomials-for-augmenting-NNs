@@ -15,6 +15,8 @@ def load_module(fn, name):
 def load_model(model_fn, model_name, args=None):
     model = load_module(model_fn, model_name)
     model1 = model(**args) if args else model()
+    if pretrained_params_path in args:
+        model1.load_state_dict(torch.load(args['pretrained_params_path'])['net'])
     return model1
 
 
@@ -30,7 +32,7 @@ def save_checkpoints(net, optimizer, epoch, model_path):
 def return_loaders(root, batch_size, **kwargs):
     """
     Return the loader for the data. This is used both for training and for
-    validation. Currently, hardcoded to CIFAR10. 
+    validation. Currently, hardcoded to CIFAR10.
     :param root: (str) Path of the root for finding the appropriate pkl/npy.
     :param batch_size: (int) The batch size for training.
     :param kwargs:
