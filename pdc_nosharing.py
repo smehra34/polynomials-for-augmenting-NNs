@@ -228,6 +228,12 @@ class PDC(nn.Module):
         self.layer3 = self._make_layer(block, n_channels[2], num_blocks[2], stride=2, planes_ho=planes_ho[2], **kwargs)
         self.layer4 = self._make_layer(block, n_channels[3], num_blocks[3], stride=2, planes_ho=planes_ho[3], **kwargs)
 
+        # if there's an activations tracker, register the activation layer
+        # created during make_layer. Call this outside since make_layer is
+        # called multiple times but we only want to register the final layer
+        if self.activations_tracker is not None:
+            self.activations_tracker.add_layer(self.activ)
+
         if len(n_channels) > 4:
             print('Using additional blocks (org. 4): ', len(n_channels))
             for i in range(len(n_channels) - 4):
@@ -252,11 +258,9 @@ class PDC(nn.Module):
         # # cheeky way to get the activation from the layer1, e.g. in no activation case.
         self.activ = layers[0].activ1
         # if the activ layer is a prelu, then we want to create a separate layer
-        # with the same initial parameter and track it
+        # with the same initial parameter
         if isinstance(self.activ, nn.PReLU):
             self.activ = nn.PReLU(init=self.activ.weight.data.item())
-            if self.activations_tracker is not None:
-                self.activations_tracker.add_layer(layer)
         return nn.Sequential(*layers)
 
     def forward(self, x):
