@@ -57,12 +57,13 @@ class BasicBlock(nn.Module):
                 self._norm_layer(self.expansion*planes)
             )
             planes1 = self.expansion * planes
-        self.activ = self._get_activ_layer() if self.use_activ else lambda x: x
+        self.activ1 = self._get_activ_layer() if self.use_activ else lambda x: x
+        self.activ2 = self._get_activ_layer() if self.use_activ else lambda x: x
 
-        assert not self.use_activ if self.activ(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
+        assert not self.use_activ if self.activ1(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
         assert not (self.train_time_activ and not self.use_activ), 'use_activ must be True to use train time activations'
-        assert not (self.train_time_activ == 'regularised' and not isinstance(self.activ, nn.PReLU))
-        assert not (self.train_time_activ == 'fixed_increment' and not isinstance(self.activ, nn.LeakyReLU))
+        assert not (self.train_time_activ == 'regularised' and not isinstance(self.activ1, nn.PReLU))
+        assert not (self.train_time_activ == 'fixed_increment' and not isinstance(self.activ1, nn.LeakyReLU))
 
         self.use_alpha = use_alpha
         if self.use_alpha:
@@ -109,7 +110,7 @@ class BasicBlock(nn.Module):
         print(f"{'Train time ' if self.train_time_activ else ''}{'activations being used' if self.use_activ else 'No activations being used'}")
 
     def forward(self, x):
-        out = self.activ(self.bn1(self.conv1(x)))
+        out = self.activ1(self.bn1(self.conv1(x)))
         if not self.use_only_first_conv:
             out = self.bn2(self.conv2(out))
         out1 = out + self.shortcut(x)
@@ -125,7 +126,7 @@ class BasicBlock(nn.Module):
             self.monitor_alpha.append(self.alpha)
         else:
             out1 += out_so
-        out = self.activ(out1)
+        out = self.activ2(out1)
         return out
 
     def def_local_convs(self, planes, n_lconvs, kern_loc, func_norm, key='l', typet='conv', out_planes=None):
@@ -179,9 +180,13 @@ class BasicBlock(nn.Module):
 
     def remove_all_activations(self):
         """Sets all activation functions in the block to identity fct"""
-        print(f"activ PReLU param before removal = {next(self.activ.parameters(), None)}")
-        self.activ = nn.Identity()
-        assert self.activ(torch.tensor(-100, dtype=torch.float)) == -100
+        print(f"activ1 PReLU param before removal = {next(self.activ1.parameters(), None)}")
+        self.activ1 = nn.Identity()
+        assert self.activ1(torch.tensor(-100, dtype=torch.float)) == -100
+        print(f"activ2 PReLU param before removal = {next(self.activ2.parameters(), None)}")
+        self.activ2 = nn.Identity()
+        assert self.activ2(torch.tensor(-100, dtype=torch.float)) == -100
+
 
         print(f"lactiv PReLU param before removal = {next(self.lactiv.parameters(), None)}")
         self.lactiv = nn.Identity()
@@ -245,7 +250,13 @@ class PDC(nn.Module):
                                 **kwargs))
             self.in_planes = planes * block.expansion
         # # cheeky way to get the activation from the layer1, e.g. in no activation case.
-        self.activ = layers[0].activ
+        self.activ = layers[0].activ1
+        # if the activ layer is a prelu, then we want to create a separate layer
+        # with the same initial parameter and track it
+        if isinstance(self.activ, nn.PReLU):
+            self.activ = nn.PReLU(init=self.activ.weight.data.item())
+            if self.activations_tracker is not None:
+                self.activations_tracker.add_layer(layer)
         return nn.Sequential(*layers)
 
     def forward(self, x):
