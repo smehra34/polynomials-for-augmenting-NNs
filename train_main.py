@@ -141,6 +141,12 @@ def main(seed=None, use_cuda=True):
     # load the model.
     net = load_model(modc['fn'], modc['name'], modc['args']).to(device)
 
+    # if using pretrained model parameters, print initial accuracy as a sanity
+    # check
+    if 'pretrained_params_path' in modc['args']:
+        acc = test(net, test_loader, device=device)
+        print(f"\nInitial accuracy with pretrained weights: {acc}\n")
+
     # report number of train time activation layers being tracked
     if activations_tracker is not None:
         print(f"Registered {activations_tracker.num_active} train time activation layers")
@@ -226,7 +232,7 @@ def main(seed=None, use_cuda=True):
 
         metric_logger.step()
         metric_logger.save_values(out)
-        
+
     metric_logger.plot_values(out)
 
 if __name__ == '__main__':
