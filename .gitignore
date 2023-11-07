@@ -22,3 +22,4 @@
 # personal testout files.
 personal.py
 
+**/logs/
