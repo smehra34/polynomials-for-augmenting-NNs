@@ -15,6 +15,7 @@ import torch.optim as optim
 from utils import (save_checkpoints, load_model, return_loaders)
 from activations import (ActivationsTracker, RegularisationWeightScheduler,
                          ActivationsVisualiser, ActivationIncrementer)
+from visualisations import MetricsOverEpochsViz
 
 torch.backends.cudnn.benchmark = True
 base = dirname(abspath(__file__))
@@ -22,7 +23,7 @@ sys.path.append(base)
 
 
 def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
-          activations_tracker=None, reg_w_scheduler=None):
+          activations_tracker=None, reg_w_scheduler=None, metric_logger=None):
     """ Perform single epoch of the training."""
     net.train()
     # # initialize variables that are augmented in every batch.
@@ -62,6 +63,12 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
                             float(train_loss), reg_loss_str,
                             float(correct) / total))
             start_time = time()
+
+    if metric_logger is not None:
+        metric_logger.add_value('acc', float(correct) / total, 'train')
+        metric_logger.add_value('train_loss', float(train_loss), 'other')
+        if activations_tracker is not None:
+            metric_logger.add_value('reg_loss', float(reg_loss), 'other')
 
     return net
 
@@ -116,6 +123,8 @@ def main(seed=None, use_cuda=True):
     m1 = 'Current path: {}. Length of iters per epoch: {}. Length of testing batches: {}.'
     print(m1.format(cur_path, len(train_loader), len(test_loader)))
 
+    activation_metrics_to_track = []
+
     modc = yml['model']
     # add an activations tracker object to the model args if an activation
     # layer parameter threshold was provided
@@ -123,9 +132,11 @@ def main(seed=None, use_cuda=True):
     if modc['args']['train_time_activ'] == 'regularised':
         activations_tracker = ActivationsTracker(**yml['training_info']['train_time_activations'])
         modc['args']['activations_tracker'] = activations_tracker
+        activation_metrics_to_track += ['num_active', 'reg_loss']
 
     elif modc['args']['train_time_activ'] == 'fixed_increment':
         activation_incrementer = ActivationIncrementer(**yml['training_info']['train_time_activations'])
+        activation_metrics_to_track += ['leakyrelu_slope']
 
     # load the model.
     net = load_model(modc['fn'], modc['name'], modc['args']).to(device)
@@ -144,6 +155,9 @@ def main(seed=None, use_cuda=True):
 
     total_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
     print('total params: {}'.format(total_params))
+
+    metric_logger = MetricsOverEpochsViz(train_val_metrics = ['acc'],
+                                         other_metrics = ['train_loss'] + activation_metrics_to_track)
 
     # # get the milestones/gamma for the optimizer.
     tinfo = yml['training_info']
@@ -169,16 +183,18 @@ def main(seed=None, use_cuda=True):
                                                                 **tinfo['train_time_activations']['scheduler'])
 
         elif modc['args']['train_time_activ'] == 'fixed_increment':
-            activation_incrementer.step()
+            slope = activation_incrementer.step()
+            metric_logger.add_value('leakyrelu_slope', slope, 'other')
 
         scheduler.step()
         net = train(train_loader, net, optimizer, criterion, yml['training_info'],
                     epoch, device, activations_tracker=activations_tracker,
-                    reg_w_scheduler=reg_w_scheduler)
+                    reg_w_scheduler=reg_w_scheduler, metric_logger=metric_logger)
 
         if activations_tracker is not None:
             activations_tracker.update_active_layers()
-            activations_tracker.print_active_params()
+            num_active = activations_tracker.print_active_params()
+            metric_logger.add_value('num_active', num_active, 'other')
 
             activations_visualiser.step(net)
             activations_visualiser.save_values(out)
@@ -189,6 +205,7 @@ def main(seed=None, use_cuda=True):
         save_checkpoints(net, optimizer, epoch, out)
         # # testing mode to evaluate accuracy.
         acc = test(net, test_loader, device=device)
+        metric_logger.add_value('acc', acc, 'val')
         if acc > best_acc:
             out_path = join(out, 'net_best_1.pth')
             state = {'net': net.state_dict(), 'acc': acc,
@@ -207,6 +224,10 @@ def main(seed=None, use_cuda=True):
         print(msg.format(epoch,  acc, best_acc, best_epoch))
         logging.info(msg.format(epoch, acc, best_acc, best_epoch))
 
+        metric_logger.step()
+        metric_logger.save_values(out)
+        
+    metric_logger.plot_values(out)
 
 if __name__ == '__main__':
     main()

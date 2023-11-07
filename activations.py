@@ -63,6 +63,7 @@ class ActivationsTracker():
 
         print(f"{self.num_active} / {self.init_num_active} activation layers remain active")
         print(['%.4f' % p for p in params])
+        return self.num_active
 
     def _deactivate_layer(self, layer_idx):
 
@@ -236,8 +237,10 @@ class ActivationIncrementer():
             if self.epochs_since_increment >= self.increment_patience:
                 SHARED_LEAKYRELU_LAYER.negative_slope += self.increment
                 self.epochs_since_increment = 0
-                
+
             self.epochs_since_increment += 1
 
         assert(SHARED_LEAKYRELU_LAYER.negative_slope <= 1)
         print(f"LeakyReLU slope (epoch {self.current_epoch}): {SHARED_LEAKYRELU_LAYER.negative_slope}")
+
+        return SHARED_LEAKYRELU_LAYER.negative_slope
