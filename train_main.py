@@ -10,7 +10,9 @@ import logging
 import shutil
 
 import torch
+import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 
 from utils import (save_checkpoints, load_model, return_loaders)
 from activations import (ActivationsTracker, RegularisationWeightScheduler,
@@ -20,6 +22,22 @@ from visualisations import MetricsOverEpochsViz
 torch.backends.cudnn.benchmark = True
 base = dirname(abspath(__file__))
 sys.path.append(base)
+
+
+# taken from https://github.com/grigorisg9gr/regularized_polynomials/blob/master/train_main_label_smooth.py
+class LabelSmoothingCrossEntropy(nn.Module):
+    """ Perform Label Smoothing for the training"""
+    def __init__(self, smoothing=0.1):
+        super(LabelSmoothingCrossEntropy, self).__init__()
+        self.smoothing = smoothing
+    def forward(self, x, target):
+        confidence = 1. - self.smoothing
+        logprobs = F.log_softmax(x, dim=-1)
+        nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
+        nll_loss = nll_loss.squeeze(1)
+        smooth_loss = -logprobs.mean(dim=-1)
+        loss = confidence * nll_loss + self.smoothing * smooth_loss
+        return loss.mean()
 
 
 def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
@@ -152,8 +170,15 @@ def main(seed=None, use_cuda=True):
         print(f"Registered {activations_tracker.num_active} train time activation layers")
         activations_visualiser = ActivationsVisualiser(net)
 
-    # # define the criterion and the optimizer.
-    criterion = torch.nn.CrossEntropyLoss().to(device)
+    # # define the criterion
+    if 'label_smoothing' in yml['training_info']:
+        label_smoothing = yml['training_info']['label_smoothing']
+        print('Applying label smoothing with alpha:', label_smoothing)
+        criterion = LabelSmoothingCrossEntropy(smoothing=label_smoothing).to(device)
+    else:
+        criterion = torch.nn.CrossEntropyLoss().to(device)
+
+    # define optimizer
     sub_params = [p for p in list(net.parameters()) if p.requires_grad]
     decay = yml['training_info']['weight_dec'] if 'weight_dec' in yml['training_info'].keys() else 5e-4
     optimizer = optim.SGD(sub_params, lr=yml['learning_rate'],
