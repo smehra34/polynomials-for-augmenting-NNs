@@ -87,7 +87,7 @@ class BasicBlock(nn.Module):
                 print(f"Overriding what_lactiv parameter and using {type(ac1).__name__} since train_time_activ is set to {self.train_time_activ}")
 
         self.lactiv = ac1 if self.use_lactiv else lambda x: x
-        assert not self.use_activ if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
+        assert not self.use_lactiv if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_lactiv
         assert not (self.use_lactiv and self.train_time_activ == 'regularised' and not isinstance(self.lactiv, nn.PReLU))
         assert not (self.use_lactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.lactiv, nn.LeakyReLU))
 
@@ -103,7 +103,7 @@ class BasicBlock(nn.Module):
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
         self.uactiv = ac2 if self.use_uactiv else lambda x: x
 
-        assert not self.use_activ if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
+        assert not self.use_uactiv if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_uactiv
         assert not (self.use_uactiv and self.train_time_activ == 'regularised' and not isinstance(self.uactiv, nn.PReLU))
         assert not (self.use_uactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.uactiv, nn.LeakyReLU))
 
