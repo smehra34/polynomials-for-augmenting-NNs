@@ -13,12 +13,16 @@ import torch.optim as optim
 
 from utils import (save_checkpoints, load_model, return_loaders)
 
+from visualisations import MetricsOverEpochsViz, PReLUVisualiser
+
+
 torch.backends.cudnn.benchmark = True
 base = dirname(abspath(__file__))
 sys.path.append(base)
 
 
-def train(train_loader, net, optimizer, criterion, train_info, epoch, device):
+def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
+          metric_logger=None):
     """ Perform single epoch of the training."""
     net.train()
     # # initialize variables that are augmented in every batch.
@@ -44,10 +48,15 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device):
             print(m2.format(time() - start_time, epoch, idx, len(train_loader),
                             float(train_loss), float(correct) / total))
             start_time = time()
+
+    if metric_logger is not None:
+    metric_logger.add_value('acc', float(correct) / total, 'train')
+    metric_logger.add_value('train_loss', float(train_loss), 'other')
+
     return net
 
 
-def test(net, test_loader, device='cuda'):
+def test(net, test_loader, device='cuda', verbose=False):
     """ Perform testing, i.e. run net on test_loader data
         and return the accuracy. """
     net.eval()
@@ -55,7 +64,8 @@ def test(net, test_loader, device='cuda'):
     if hasattr(net, 'is_training'):
         net.is_training = False
     for (idx, data) in enumerate(test_loader):
-        sys.stdout.write('\r [%d/%d]' % (idx + 1, len(test_loader)))
+        if verbose:
+            sys.stdout.write('\r [%d/%d]' % (idx + 1, len(test_loader)))
         sys.stdout.flush()
         img, label = data[0].to(device), data[1].to(device)
         with torch.no_grad():
@@ -93,6 +103,15 @@ def main(seed=None, use_cuda=True):
     modc = yml['model']
     net = load_model(modc['fn'], modc['name'], modc['args']).to(device)
 
+    prelu_viz = ('activ_type' in modc['args'].keys() and modc['args']['activ_type']=='prelu')
+    if prelu_viz:
+        prelu_visualiser = PReLUVisualiser(net)
+
+    print('\n\n')
+    print(net)
+    print('\n\n')
+
+
     # # define the criterion and the optimizer.
     criterion = torch.nn.CrossEntropyLoss().to(device)
     sub_params = [p for p in list(net.parameters()) if p.requires_grad]
@@ -103,6 +122,9 @@ def main(seed=None, use_cuda=True):
     total_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
     print('total params: {}'.format(total_params))
 
+    metric_logger = MetricsOverEpochsViz(train_val_metrics = ['acc'],
+                                         other_metrics = ['train_loss'])
+
     # # get the milestones/gamma for the optimizer.
     tinfo = yml['training_info']
     mil = tinfo['lr_milestones'] if 'lr_milestones' in tinfo.keys() else [40, 60, 80, 100]
@@ -112,25 +134,35 @@ def main(seed=None, use_cuda=True):
 
     for epoch in range(1, tinfo['total_epochs'] + 1):
         scheduler.step()
-        net = train(train_loader, net, optimizer, criterion, yml['training_info'], 
-                    epoch, device)
+        net = train(train_loader, net, optimizer, criterion, yml['training_info'],
+                    epoch, device, metric_logger=metric_logger)
+
+        if prelu_viz:
+            prelu_visualiser.step(net)
+            prelu_visualiser.save_values(out)
+
         save_checkpoints(net, optimizer, epoch, out)
-        # # testing mode to evaluate accuracy. 
+        # # testing mode to evaluate accuracy.
         acc = test(net, test_loader, device=device)
+        metric_logger.add_value('acc', acc, 'val')
         if acc > best_acc:
             out_path = join(out, 'net_best_1.pth')
-            state = {'net': net.state_dict(), 'acc': acc, 
+            state = {'net': net.state_dict(), 'acc': acc,
                      'epoch': epoch, 'n_params': total_params}
             torch.save(state, out_path)
             best_acc = acc
             best_epoch = epoch
         accuracies.append(float(acc))
-        msg = 'Epoch:{}.\tAcc: {:.03f}.\t Best_Acc:{:.03f} (epoch: {}).'
+        msg = '\nEpoch:{}.\tAcc: {:.03f}.\t Best_Acc:{:.03f} (epoch: {}).\n'
         print(msg.format(epoch,  acc, best_acc, best_epoch))
         logging.info(msg.format(epoch, acc, best_acc, best_epoch))
+
+        metric_logger.step()
+        metric_logger.save_values(out)
+
+    metric_logger.plot_values(out)
+
 
 
 if __name__ == '__main__':
     main()
-
-

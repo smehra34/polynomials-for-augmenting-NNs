@@ -17,14 +17,21 @@ def get_norm(norm_local):
         norm_local = lambda a: lambda x: x
     return norm_local
 
+def get_activ_layer(type='relu'):
+    if type == 'prelu':
+        return nn.PReLU(init=0)
+    return nn.ReLU(inplace=True)
+
+
 
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, use_activ=True, use_alpha=False, n_lconvs=0, 
+    def __init__(self, in_planes, planes, stride=1, use_activ=True, use_alpha=False, n_lconvs=0,
                  norm_local=None, kern_loc=1, norm_layer=None, use_lactiv=False, norm_x=-1,
                  n_xconvs=0, what_lactiv=-1, kern_loc_so=3, use_uactiv=False, norm_bso=None,
-                 use_only_first_conv=False, n_bsoconvs=0, init_a=0, planes_ho=None, **kwargs):
+                 use_only_first_conv=False, n_bsoconvs=0, init_a=0, planes_ho=None,
+                 activ_type='relu', **kwargs):
         super(BasicBlock, self).__init__()
         self._norm_layer = get_norm(norm_layer)
         self._norm_local = get_norm(norm_local)
@@ -53,23 +60,27 @@ class BasicBlock(nn.Module):
                 self._norm_layer(self.expansion*planes)
             )
             planes1 = self.expansion * planes
-        self.activ = partial(nn.ReLU(inplace=True)) if self.use_activ else lambda x: x
+        self.activ1 = get_activ_layer(type=activ_type) if self.use_activ else lambda x: x
+        self.activ2 = get_activ_layer(type=activ_type) if self.use_activ else lambda x: x
+        assert not self.use_activ if self.activ1(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_activ
         self.use_alpha = use_alpha
         if self.use_alpha:
             self.alpha = nn.Parameter(torch.ones(1) * init_a)
             self.monitor_alpha = []
         self.normx = self._norm_x(planes1)
+        ac2 = None
         if 1:
             if what_lactiv == -1:
-                ac1 = nn.ReLU(inplace=True)
+                ac1 = get_activ_layer(type=activ_type)
+                ac2 = get_activ_layer(type=activ_type)
             elif what_lactiv == 1:
                 ac1 = nn.Softmax2d()
             elif what_lactiv == 2:
                 ac1 = nn.LeakyReLU(inplace=True)
             elif what_lactiv == 3:
                 ac1 = torch.tanh
-        self.lactiv = partial(ac1) if self.use_lactiv else lambda x: x
-        # # check the output planes for higher-order terms.
+        self.lactiv = ac1 if self.use_lactiv else lambda x: x
+        assert ((not self.use_lactiv) or (not self.use_activ)) if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_lactiv        # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
             planes_ho = planes1
         print('(Internal) planes in the higher-order terms: {}.'.format(planes_ho))
@@ -79,10 +90,13 @@ class BasicBlock(nn.Module):
         #self.def_local_convs(planes1, n_xconvs, kern_loc, self._norm_x, key='x')
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=1, out_planes=planes_ho)
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
-        self.uactiv = partial(ac1) if self.use_uactiv else lambda x: x
+        ac2 = ac1 if ac2 is None else ac2
+        self.uactiv = ac2 if self.use_uactiv else lambda x: x
+        assert ((not self.use_uactiv) or (not self.use_activ)) if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_uactiv        # # check the output planes for higher-order terms.
+
 
     def forward(self, x):
-        out = self.activ(self.bn1(self.conv1(x)))
+        out = self.activ1(self.bn1(self.conv1(x)))
         if not self.use_only_first_conv:
             out = self.bn2(self.conv2(out))
         out1 = out + self.shortcut(x)
@@ -98,7 +112,7 @@ class BasicBlock(nn.Module):
             self.monitor_alpha.append(self.alpha)
         else:
             out1 += out_so
-        out = self.activ(out1)
+        out = self.activ2(out1)
         return out
 
     def def_local_convs(self, planes, n_lconvs, kern_loc, func_norm, key='l', typet='conv', out_planes=None):
@@ -176,7 +190,7 @@ class PDC(nn.Module):
         self.linear = nn.Linear(n_channels[-1] * block.expansion, num_classes)
         # # if linear case and requested, include an output non-linearity.
         cond = self.out_activ and self.activ(torch.tensor(-100)) == -100
-        self.oactiv = partial(nn.ReLU(inplace=True)) if cond else lambda x: x
+        self.oactiv = nn.ReLU(inplace=True) if cond else lambda x: x
         print('output non-linearity: #', self.out_activ, cond)
 
 
@@ -184,11 +198,14 @@ class PDC(nn.Module):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, stride, 
+            layers.append(block(self.in_planes, planes, stride,
                                 norm_layer=self._norm_layer, **kwargs))
             self.in_planes = planes * block.expansion
         # # cheeky way to get the activation from the layer1, e.g. in no activation case.
-        self.activ = layers[0].activ
+        self.activ = layers[0].activ1
+        if isinstance(self.activ, nn.PReLU):
+            self.activ = nn.PReLU(init=self.activ.weight.data.item())
+
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -211,5 +228,3 @@ def PDC_wrapper(num_blocks=None, **kwargs):
     if num_blocks is None:
         num_blocks = [1, 1, 1, 1]
     return PDC(BasicBlock, num_blocks, **kwargs)
-
-

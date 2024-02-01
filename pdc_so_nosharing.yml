@@ -19,7 +19,8 @@ model:
     kern_loc: 3
     kern_loc_so: 3
     norm_x: 0
-    what_lactiv: 2
+    what_lactiv: -1
+    activ_type: prelu
     use_uactiv: True
     n_channels: [64, 128, 192, 256]
     planes_ho:  [64, 64, 128, 128]
