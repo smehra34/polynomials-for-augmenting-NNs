@@ -50,8 +50,8 @@ def train(train_loader, net, optimizer, criterion, train_info, epoch, device,
             start_time = time()
 
     if metric_logger is not None:
-    metric_logger.add_value('acc', float(correct) / total, 'train')
-    metric_logger.add_value('train_loss', float(train_loss), 'other')
+        metric_logger.add_value('acc', float(correct) / total, 'train')
+        metric_logger.add_value('train_loss', float(train_loss), 'other')
 
     return net
 
@@ -90,8 +90,10 @@ def main(seed=None, use_cuda=True):
     device = torch.device('cuda' if cuda else 'cpu')
     yml = yaml.safe_load(open('pdc_so_nosharing.yml'))  # # file that includes the configuration.
     cur_path = abspath(curdir)
+
+    name = '' if 'name' not in yml else yml['name']
     # # define the output path
-    out = join(cur_path, 'results_poly', '')
+    out = join(cur_path, 'results_poly', name)
     if not isdir(out):
         makedirs(out)
 

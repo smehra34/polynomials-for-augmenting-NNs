@@ -1,6 +1,8 @@
 comment: '7/2022: Used for the ECCV --- compressed version (4.3 mil params).'
 learning_rate: 0.1
 
+name: prelu
+
 dataset:
   root: /tmp/
   batch_size: 128
