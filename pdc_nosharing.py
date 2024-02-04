@@ -81,15 +81,22 @@ class BasicBlock(nn.Module):
                 ac1 = torch.tanh
             ac2 = ac1
         else:
-            ac1 = self._get_activ_layer()
-            ac2 = self._get_activ_layer()
-            if what_lactiv != -1:
-                print(f"Overriding what_lactiv parameter and using {type(ac1).__name__} since train_time_activ is set to {self.train_time_activ}")
+            ac1 = 'tta' #self._get_activ_layer()
+            ac2 = 'tta' #self._get_activ_layer()
+            #if what_lactiv != -1:
+        #        print(f"Overriding what_lactiv parameter and using {type(ac1).__name__} since train_time_activ is set to {self.train_time_activ}")
 
         self.lactiv = ac1 if self.use_lactiv else lambda x: x
-        assert not self.use_lactiv if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_lactiv
-        assert not (self.use_lactiv and self.train_time_activ == 'regularised' and not isinstance(self.lactiv, nn.PReLU))
-        assert not (self.use_lactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.lactiv, nn.LeakyReLU))
+        #assert not self.use_lactiv if self.lactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_lactiv
+        #assert not (self.use_lactiv and self.train_time_activ == 'regularised' and not isinstance(self.lactiv, nn.PReLU))
+        #assert not (self.use_lactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.lactiv, nn.LeakyReLU))
+
+        self.uactiv = ac2 if self.use_uactiv else lambda x: x
+
+        #assert not self.use_uactiv if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_uactiv
+        #assert not (self.use_uactiv and self.train_time_activ == 'regularised' and not isinstance(self.uactiv, nn.PReLU))
+        #assert not (self.use_uactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.uactiv, nn.LeakyReLU))
+
 
         # # check the output planes for higher-order terms.
         if planes_ho is None or planes_ho < 0:
@@ -101,11 +108,6 @@ class BasicBlock(nn.Module):
         #self.def_local_convs(planes1, n_xconvs, kern_loc, self._norm_x, key='x')
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=1, out_planes=planes_ho)
         self.def_convs_so(planes1, kern_loc_so, self._norm_x, key=2, out_planes=planes_ho)
-        self.uactiv = ac2 if self.use_uactiv else lambda x: x
-
-        assert not self.use_uactiv if self.uactiv(torch.tensor(-100, dtype=torch.float)) == -100 else self.use_uactiv
-        assert not (self.use_uactiv and self.train_time_activ == 'regularised' and not isinstance(self.uactiv, nn.PReLU))
-        assert not (self.use_uactiv and self.train_time_activ == 'fixed_increment' and not isinstance(self.uactiv, nn.LeakyReLU))
 
         print(f"{'Train time ' if self.train_time_activ else ''}{'activations being used' if self.use_activ else 'No activations being used'}")
 
@@ -144,12 +146,18 @@ class BasicBlock(nn.Module):
             for i in range(n_lconvs):
                 setattr(self, '{}{}{}'.format(key, typet, i), convl())
                 setattr(self, '{}bn{}'.format(key, i), func_norm(out_planes))
+                if self.lactiv == 'tta':
+                    activ = self._get_activ_layer()
+                else:
+                    activ = self.lactiv
+                setattr(self, 'activ_l{}{}'.format(key, i), activ)
+
 
     def apply_local_convs(self, out_so, n_lconvs, key='l'):
         if n_lconvs > 0:
             for i in range(n_lconvs):
                 out_so = getattr(self, '{}conv{}'.format(key, i))(out_so)
-                out_so = self.lactiv(getattr(self, '{}bn{}'.format(key, i))(out_so))
+                out_so = getattr(self, 'activ_l{}{}'.format(key, i))(getattr(self, '{}bn{}'.format(key, i))(out_so))
         return out_so
 
     def def_convs_so(self, planes, kern_loc, func_norm, key=1, out_planes=None):
@@ -160,11 +168,16 @@ class BasicBlock(nn.Module):
                         kernel_size=kern_loc, stride=1, padding=int(kern_loc > 1), bias=False)
         setattr(self, 'u_conv{}'.format(key), convl())
         setattr(self, 'ubn{}'.format(key), func_norm(out_planes))
+        if self.uactiv == 'tta':
+            activ = self._get_activ_layer()
+        else:
+            activ = self.uactiv
+        setattr(self, 'activ_so{}'.format(key), activ)
 
     def apply_convs_so(self, input1, key=1):
         # # second order convs.
         out_uo = getattr(self, 'u_conv{}'.format(key))(input1)
-        out_uo = self.uactiv(getattr(self, 'ubn{}'.format(key))(out_uo))
+        out_uo = getattr(self, 'activ_so{}'.format(key))(getattr(self, 'ubn{}'.format(key))(out_uo))
         return out_uo
 
     def _get_activ_layer(self):
